@@ -10,8 +10,16 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <pthread.h>
+#include "dap_config.h"
 
-bool read_config_file(char *);
+extern bool action;
+
+typedef struct pt_data {
+    dap_chain_block_cache_t *l_block_cache;
+    dap_chain_block_t *l_block;
+} pt_data;
+
 
 void handle_sig(int);
 

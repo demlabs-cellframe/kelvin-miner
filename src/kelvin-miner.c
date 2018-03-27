@@ -1,32 +1,28 @@
 #include "kelvin-miner.h"
 
-static bool action = false;
+bool action = false;
+static dap_server_t* sh;
 
-bool read_config_file(char *buf)
-{
-	FILE *config_file = fopen("../distr/kelvin-miner.cfg", "r");
-	if(!config_file) {
-		return false;
-	}
-	fseek(config_file, 0, SEEK_END);
-	long buf_size = ftell(config_file);
-	fseek(config_file, 0, SEEK_SET);
-	if (!buf) {
-		buf = malloc(sizeof(char) * (buf_size + 1));
-	}
-	else {
-		char *temp = realloc(buf, sizeof(char) * (buf_size + 1));
-		buf = temp;
-	}
-	if (buf) {
-		size_t file_size = fread(buf, buf_size, sizeof(char), config_file);
-		buf[file_size++] = '\0';
-	}
-	else {
-		return false;
-	}
-	fclose(config_file);
-	return true;
+void *pt_block_new(void *pt_arg) {
+    pt_data *data = (pt_data *)pt_arg;
+    data -> l_block = (dap_chain_block_t *)calloc(1, sizeof(data -> l_block -> header));
+    if(!(data -> l_block)) {
+         pthread_exit(NULL);
+    }
+    else {
+        data -> l_block -> header.signature = DAP_CHAIN_BLOCK_SIGNATURE;
+        data -> l_block -> header.version = 1;
+        data -> l_block -> header.timestamp = time(NULL);
+        if (data -> l_block_cache -> l_block) {
+            memcpy(&(data -> l_block) -> header.prev_block, data -> l_block_cache -> l_block, sizeof(data -> l_block -> header.prev_block));
+        }
+        else {
+             memset(&(data -> l_block) -> header.prev_block, 0xff, sizeof(data -> l_block -> header.prev_block));
+        }
+        data -> l_block -> header.size = sizeof(data -> l_block -> header);
+        pthread_exit(NULL); // how, or if, should we tell this fromblock alloc failure ?
+        //return (void *)(data -> l_block);  // 
+    }
 }
 
 void handle_sig(int sig)
@@ -34,6 +30,9 @@ void handle_sig(int sig)
 	if (sig == SIGINT || sig == SIGTERM) {
 		// interrupt or terminate proc
 		action = false;
+        if (sh) {
+            dap_server_delete(sh);
+        }
 		signal(SIGINT, SIG_DFL);
 	} 
 	else if (sig == SIGCHLD) {
@@ -41,12 +40,10 @@ void handle_sig(int sig)
 	}
 }
 
-void daemon()
+pid_t daemon()
 {
 	pid_t pid, sid;
 	pid = 0; sid = 0;
-	int fd;
-
 	pid = fork();
 	if (pid < 0) {
 		// Child was not born, handle it someway, not obligatory fail.
@@ -63,15 +60,7 @@ void daemon()
 	close(STDIN_FILENO);
 	close(STDOUT_FILENO);
 	close(STDERR_FILENO);
-
-	char pid_c[64];
-	
-	int pid_fd = open("pid_file", O_APPEND); // filename not fixed yet
-	if (pid_fd < 0) {
-		// Handle the fact we can't save pid
-	}
-	itoa(getpid(), pid_c, 10);
-	write(pid_fd, pid_c, strlen(pid_c));
+	return getpid();
 }
 
 int main(int argc, char **argv)
@@ -83,7 +72,6 @@ int main(int argc, char **argv)
 	int val;
 	int option_index = 0;
 	bool daemon_action = false;
-
 	while ((val = getopt_long(argc, argv, "d", long_options, &option_index)) != -1) {
 		switch (val) {
 			case 'd':
@@ -95,21 +83,44 @@ int main(int argc, char **argv)
 				break;
 		}
 	}
-	
 	if (daemon_action) {
-		daemon();
+		pid_t pid = daemon();
+		char pid_c[64];
+		dap_config_t *l_config = dap_config_open(l_config_name);
+		if (l_config) {
+			const char *pid_file = dap_config_get_item_str(l_config, "general", "pid_file");
+		}
+		int pid_fd = open(pid_file, O_APPEND);
+		if (pid_fd < 0) {
+			// Handle the fact we can't save pid
+		}
+		itoa(pid, pid_c, 10);
+		write(pid_fd, pid_c, strlen(pid_c));
+		fclose(pid_fd);
 	}
 	signal(SIGINT, handle_signal);
 	signal(SIGTERM, handle_signal);
-	
-	char *config_buf;
-	if (read_conf_file(config_buf)) {
-		// TODO make use of cfg content
-	}
-	action = true;
-	while (action) {
-		// TODO stuff, use select / poll for async handling
-		sleep(1);
-	}
+    pthread_t tid;
+    pt_data data;
+    // To this end here must be some 'data -> l_block_cache' init for further use.
+    pthread_create(&tid, NULL, pt_block_new, (void *)&data);
+/*  dap_chain_block_t *l_b;
+    pthread_join(tid, (void *)&lb); */ // TODO - resolve which ret handling suits better here. I recommend the current.
+    pthread_join(tid, NULL);
+    if (data -> l_block) {
+        // pass it thru
+    }
+    char addr[] = "127.0.0.1";
+    uint16_t port = 8888;
+    dap_server_type_t s_type = DAP_SERVER_TCP;
+    sh = dap_server_listen(addr, port, s_type);
+    if (sh) {
+        dap_server_init();
+	    dap_server_loop(sh);
+        action = true;
+    }
+    else {
+        // TODO - handle this
+    }
 	return EXIT_SUCCESS;
 }
