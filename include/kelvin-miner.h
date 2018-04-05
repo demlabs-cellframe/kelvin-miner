@@ -12,14 +12,25 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include "dap_config.h"
+#include <stdint.h>
+#include <time.h>
+#include <stdbool.h>
+
+typedef void (*dap_kelvin_miner_client_callback_t) (dap_kelvin_miner_client_t *,void * arg);
+
+typedef struct dap_kelvin_miner_client {
+    bool is_alive;
+    dap_chain_miner_processor_t *proc;
+} dap_kelvin_miner_client_t;
+
 
 extern bool action;
 extern const char *s_cfg_path;
 extern const char *s_log_file;
 extern int kelvin_blocks_mined;
-extern int kelvin_blocks_mined_copper;
 extern int kelvin_blocks_mined_silver;
 extern int kelvin_blocks_mined_gold;
+extern double hpm;
 
 typedef struct pt_data {
     dap_config_t *l_cfg;
@@ -36,3 +47,6 @@ void log_on_terminate();
 void handle_sig(int);
 void daemon();
 
+void establish_new  (dap_kelvin_miner_client_t *, void *);
+void read_cmd       (dap_kelvin_miner_client_t *, void *);
+void write_response (dap_kelvin_miner_client_t *, void *);
