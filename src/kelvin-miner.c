@@ -134,18 +134,8 @@ void write_response(dap_kelvin_miner_client_t *cli, void *arg) {
 int main(int argc, char **argv)
 {
 	const struct option long_options[] = {
-		{
-			"daemon",
-			no_argument,
-			NULL,
-			'd'
-		},
-		{
-			NULL,
-			0,
-			NULL,
-			0
-		}
+		{ "daemon", no_argument, NULL, 'd' },
+		{ NULL, 0, NULL, 0 }
 	};
 	int val;
 	int option_index = 0;
